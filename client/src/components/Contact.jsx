@@ -1,64 +1,66 @@
-import { set } from "mongoose";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { Send, MessageSquare } from "lucide-react";
+import toast from "react-hot-toast";
 
-const Contact = ({ listing }) => {
-  const [landlord, setLandlord] = useState(null);
-  const [message, setMessage] = useState("");
+export default function Contact({ listing, landlord }) {
+  const { currentUser } = useSelector((s) => s.user);
+  const navigate = useNavigate();
+  const [message, setMessage] = useState(`Hi, I'm interested in ${listing?.name}. Can we discuss further?`);
+  const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    const fetchLandlord = async () => {
-      try {
-        const res = await fetch(`/api/user/${listing.userRef}`);
-        const data = await res.json();
-        if (data.success === false) {
-          return;
-        }
-        setLandlord(data);
-      } catch (error) {
-        console.log(error);
-      }
-    };
+  const handleSend = async () => {
+    if (!message.trim()) { toast.error("Please write a message"); return; }
+    setSending(true);
+    try {
+      // Get or create conversation
+      const convRes = await fetch("/api/conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          recipientId: listing.userRef,
+          listingId: listing._id,
+        }),
+      });
+      const conv = await convRes.json();
+      if (conv.success === false) throw new Error(conv.message);
 
-    fetchLandlord();
-  }, [listing.userRef]);
+      // Send the message
+      await fetch(`/api/conversation/${conv._id}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ content: message }),
+      });
 
-
-  const onChange = (e) => {
-
-    setMessage(e.target.value);
-
+      toast.success("Message sent! Opening chat...");
+      navigate(`/inbox?conv=${conv._id}`);
+    } catch (err) {
+      toast.error(err.message || "Failed to send message");
+    }
+    setSending(false);
   };
 
   return (
-    <div>
-      {landlord && (
-        <div className="flex flex-col gap-2">
-          <p>
-            Contact <span className="font-semibold">{landlord.username}</span>{" "}
-            for{" "}
-            <span className="font-semibold">{listing.name.toLowerCase()}</span>
-          </p>
-          <textarea
-            name="message"
-            id="message"
-            rows="2"
-            value={message}
-            onChange={onChange}
-            placeholder="Enter your message here..."
-            className="w-full border p-3 rounded-lg"
-          ></textarea>
-
-          <Link
-            to={`mailto:${landlord.email}?subject=Regarding ${listing.name}&body=${message}`}
-            className="bg-slate-700 text-white text-center p-3 uppercase rounded-lg hover:opacity-95"
-          >
-            Send Message
-          </Link>
-        </div>
-      )}
+    <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+      <p className="text-slate-600 text-sm">
+        Send your first message to start a conversation with the owner.
+      </p>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        rows={3}
+        className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+      />
+      <button
+        onClick={handleSend}
+        disabled={sending}
+        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+      >
+        <Send size={14} /> {sending ? "Opening chat..." : "Send & Open Chat"}
+      </button>
     </div>
   );
-};
-
-export default Contact;
+}

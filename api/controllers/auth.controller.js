@@ -6,7 +6,8 @@ import jwt from "jsonwebtoken";
 export const signup = async (req, res, next) => {
   const { username, email, password } = req.body;
   const hashedPassword = bcryptjs.hashSync(password, 10);
-  const newUser = new User({ username, email, password: hashedPassword });
+  const avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+  const newUser = new User({ username, email, password: hashedPassword, avatar });
   try {
     await newUser.save();
     res.status(201).json("User created successfully");
@@ -23,6 +24,12 @@ export const signin = async (req, res, next) => {
 
     const validPassword = bcryptjs.compareSync(password, validUser.password);
     if (!validPassword) return next(errorHandler(401, "Invalid credentials"));
+
+    // Auto-assign avatar if missing
+    if (!validUser.avatar) {
+      validUser.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(validUser.username)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+      await validUser.save();
+    }
 
     const token = jwt.sign({ id: validUser._id }, process.env.JWT_SECRET);
     const { password: pass, ...rest } = validUser._doc;
